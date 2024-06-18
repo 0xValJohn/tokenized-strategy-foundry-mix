@@ -3,6 +3,7 @@ pragma solidity 0.8.18;
 
 import {Base4626Compounder, ERC20, SafeERC20} from "@periphery/Bases/4626Compounder/Base4626Compounder.sol";
 import {TradeFactorySwapper} from "@periphery/swappers/TradeFactorySwapper.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {IStaking} from "./interfaces/FluidInterfaces.sol";
 
@@ -53,7 +54,7 @@ contract StrategyFluidLender is Base4626Compounder, TradeFactorySwapper {
     }
 
     function vaultsMaxWithdraw() public view override returns (uint256) {
-        return vault.convertToAssets(vault.maxRedeem(address(staking)));
+        return vault.convertToAssets(Math.min(staking.balanceOf(address(this)), vault.maxRedeem(address(staking))));
     }
 
     /* ========== TRADE FACTORY FUNCTIONS ========== */
@@ -81,25 +82,10 @@ contract StrategyFluidLender is Base4626Compounder, TradeFactorySwapper {
         _removeToken(_token, address(asset));
     }
 
-    /**
-     * @notice Check for tokens that shouldn't be moved (swept or swapped).
-     * @dev Use this for all tokens/tokenized positions this contract
-     * manages on a *persistent* basis (e.g. not just for swapping back to
-     * asset ephemerally).
-     */
-    function protectedTokens() public view returns (address[] memory) {
-        address[] memory protected = new address[](2);
-        protected[0] = address(asset);
-        protected[1] = address(vault);
-        return protected;
-    }
-
     // checks if a given token is on our protectedTokens list
     function _checkIfProtected(address _token) internal view {
-        address[] memory _protectedTokens = protectedTokens();
-        for (uint256 i; i < _protectedTokens.length; ++i) {
-            require(_token != _protectedTokens[i], "!protected");
-        }
+        require(_token != address(asset), "!protected");
+        require(_token != address(vault), "!protected");
     }
 
     /* ========== GOV-ONLY FUNCTIONS ========== */
@@ -118,7 +104,7 @@ contract StrategyFluidLender is Base4626Compounder, TradeFactorySwapper {
      * @param _tradeFactory Address of new trade factory.
      */
     function setTradeFactory(address _tradeFactory) external onlyGovernance {
-        _setTradeFactory(_tradeFactory, address(asset));
+        _setTradeFactory(_tradeFactory, address(vault));
     }
 
     /// @notice Sweep of non-asset ERC20 tokens to governance (onlyGovernance)
